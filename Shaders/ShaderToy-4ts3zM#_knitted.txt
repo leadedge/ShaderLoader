@@ -1,0 +1,28 @@
+//
+// knitted_post-process
+//
+//
+// https://www.shadertoy.com/view/4ts3zM#
+//
+const vec2 tileSize = vec2(16.0, 16.0);
+const float threads = 4.0;
+
+
+void main(void)
+{
+  vec2 posInTile = mod(vec2(gl_FragCoord), tileSize);
+  vec2 tileNum = floor(vec2(gl_FragCoord)/ tileSize);
+
+  vec2 nrmPosInTile = posInTile / tileSize;
+  tileNum.y += floor(abs(nrmPosInTile.x - 0.5) + nrmPosInTile.y);
+
+  vec2 texCoord = tileNum * tileSize / iResolution.xy;
+  //texCoord.y = 1.0 - texCoord.y;
+  
+  vec3 color = texture2D(iChannel0, texCoord).rgb;
+
+  color *= fract((nrmPosInTile.y + abs(nrmPosInTile.x - 0.5)) * floor(threads));
+
+  gl_FragColor = vec4(color, 1.0);
+
+}

@@ -1,0 +1,169 @@
+//
+// https://www.shadertoy.com/view/Xd2GR1
+//
+// Carnival Ride (after IQ's storm) by eiffie
+// License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
+
+// Fuzzy shadows and reflections. I really like the reflections - they are fast due to
+// knighty's improvements to my DoF code. Thanks again knighty! The shadows work well too.
+
+
+//play with these to adjust "blurriness"
+#define SHADOW_CONE_GRAD 0.15
+#define REFLECTION_CONE_GRAD 0.09
+
+#define size iResolution
+#define time iGlobalTime*0.1
+
+vec3 L;
+
+mat2 RMat2(float a){return mat2(cos(a),sin(a),-sin(a),cos(a));}
+mat2 rmx,rmx1,rmx2;
+
+float HTorus(in vec3 z){
+	return max(-z.y,max(abs(length(max(abs(z.xy)-0.5,0.0))-0.5),abs(z.z))-0.2);
+}
+const vec4 scale=vec4(1.385,-1.385,1.385,1.385);
+float DE(in vec3 z0){
+	z0.xz=z0.xz*rmx;
+	vec4 z=vec4(z0,1.0);
+	z.zy*=rmx1;
+	float d=max(abs(z.y+1.0)-1.0,length(z.xz)-0.2);
+	for(int i=0;i<4;i++){
+		z.xz=abs(z.zx);
+		z.x-=1.0;
+		d=min(d,HTorus(z.xyz)/z.w);
+		z.x-=1.0;
+		z*=scale;
+	}
+	z.xz=z.zx;
+	float s=sign(z.x);
+	z.x-=1.0;
+	d=min(d,HTorus(z.xyz)/z.w);
+	z.x-=1.0;
+	z*=scale;
+	z.xz=z.xz*rmx2*s;
+	z.x-=1.0;
+	d=min(d,HTorus(z.xyz)/z.w);
+	z.x-=1.0;
+	z*=scale;
+	z.y-=0.6;
+	d=min(d,min(length(max(abs(z.xyz)-vec3(0.0,0.5,0.55),0.0))-0.25,
+		length(max(abs(z.xyz+vec3(0.9,0.6,0.0))-vec3(0.4,-0.1,0.5),0.0))-0.4)/z.w);
+
+	return min(d,z0.y+1.5);
+}
+vec4 mcol;
+float CE(in vec3 z0){
+	vec4 z=vec4(z0,1.0);
+	z.xz=z.xz*rmx;
+	z.zy*=rmx1;
+	float d=max(abs(z.y+1.0)-1.0,length(z.xz)-0.2);
+	for(int i=0;i<4;i++){
+		z.xz=abs(z.zx);
+		z.x-=1.0;
+		d=min(d,HTorus(z.xyz)/z.w);
+		z.x-=1.0;
+		z*=scale;
+	}
+	z.xz=z.zx;
+	float s=sign(z.x);
+	z.x-=1.0;
+	d=min(d,HTorus(z.xyz)/z.w);
+	z.x-=1.0;
+	z*=scale;
+	z.xz=z.xz*rmx2*s;
+	z.x-=1.0;
+	d=min(d,HTorus(z.xyz)/z.w);
+	z.x-=1.0;
+	z*=scale;
+	z.y-=0.6;
+	float d2=min(length(max(abs(z.xyz)-vec3(0.0,0.5,0.55),0.0))-0.25,
+		length(max(abs(z.xyz+vec3(0.9,0.6,0.0))-vec3(0.4,-0.1,0.5),0.0))-0.4)/z.w;
+	float d3=z0.y+1.5;
+	d=min(d,min(d2,d3));
+	if(abs(d2-d)<0.001)mcol+=vec4(1.0,0.1,0.0,0.2);
+	else if(abs(d3-d)<0.001){
+		mcol+=vec4(0.25,0.25,0.2,0.333);
+		d+=sin(-time*100.0+100.0*pow(length(z0.xz),0.17))*0.01;
+	}else mcol+=vec4(0.0,0.5,0.5,0.5);
+	return d;
+}
+float linstep(float a, float b, float t){float v=(t-a)/(b-a);return clamp(v,0.,1.);}//from knighty
+
+float rand(vec2 co){// implementation found at: lumina.sourceforge.net/Tutorials/Noise.html
+	return fract(sin(dot(co*0.123,vec2(12.9898,78.233))) * 43758.5453);
+}
+
+float FuzzyShadow(vec3 ro, vec3 rd, float coneGrad){
+	float t=0.0,d=1.0,s=1.0;
+	ro+=rd*0.01;
+	for(int i=0;i<32;i++){
+		//if(s<0.1)continue;//uncommenting this makes shadows and reflections disappear - WTF?
+		float r=t*coneGrad;//radius of cone
+		d=DE(ro+rd*t)+r*0.5;
+		s*=linstep(-r,r,d);
+		t+=abs(d)*(0.5+0.5*rand(gl_FragCoord.xy*vec2(i)))+0.005;
+	}
+	return clamp(s*0.8+0.2,0.0,1.0);
+}
+vec3 Background(vec3 rd){return vec3(0.8,0.9,1.0)*(0.3+0.7*pow(max(0.0,dot(rd,L)),2.0));}
+vec3 FuzzyReflection(vec3 ro, vec3 rd, float coneGrad){
+	float t=0.0,d=1.0;
+	ro+=rd*0.01;
+	vec4 col=vec4(0.0);
+	for(int i=0;i<24;i++){
+		if(col.w>0.9)continue;
+		float r=t*coneGrad;//radius of cone
+		d=DE(ro+rd*t)+r*0.5;
+		if(d<r){
+			vec3 p=ro+rd*t;
+			mcol=vec4(0.0);
+			vec2 v=vec2(r,0.0);//use normal deltas based on CoC radius
+			vec3 N=normalize(vec3(-CE(p-v.xyy)+CE(p+v.xyy),-CE(p-v.yxy)+CE(p+v.yxy),-CE(p-v.yyx)+CE(p+v.yyx)));
+			vec3 scol=mcol.rgb*0.1666*max(0.1,0.25+dot(N,L)*0.75);//do some fast light calcs (you can forget about shadow casting, too expensive)
+			float alpha=(1.0-col.w)* linstep(-r,r,-d);//calculate the mix like cloud density
+			col+=vec4(scol*alpha,alpha);//blend in the new color
+		}
+		t+=abs(d)*(0.5+0.5*rand(gl_FragCoord.xy*vec2(i)))+0.005;
+	}
+	return col.rgb+Background(rd)*(1.0-clamp(col.w,0.0,1.0));
+}
+mat3 lookat(vec3 fw,vec3 up){
+	fw=normalize(fw);vec3 rt=normalize(cross(fw,normalize(up)));return mat3(rt,cross(rt,fw),fw);
+}
+
+void main() {
+	vec3 ro=vec3(-2.25,1.5+sin(time*0.9),-4);
+	vec3 rd=lookat(-ro+vec3(0.0,-2.0,0.0),vec3(0.0,1.0,0.0))*normalize(vec3((2.0*gl_FragCoord.xy-size.xy)/size.y,1.0));
+	L=normalize(vec3(0.5,0.5,-0.5));
+	rmx=RMat2(time);
+	rmx1=RMat2(0.09);
+	rmx2=RMat2(time*10.0);
+
+	vec3 col=Background(rd);
+	float t=0.0,d=1.0;
+	for(int i=0;i<64;i++){
+		if(t>10.0 || d<0.005) continue;
+		t+=d=DE(ro+rd*t);
+	}
+	if(d>=0.1 && rd.y<0.0){//fix the ground
+		t=-(ro.y+1.5)/rd.y;
+		d=0.0;	
+	}
+	if(d<0.1){//close enough for a hit
+		ro+=rd*t;
+		mcol=vec4(0.0);
+		const vec2 v=vec2(0.001,0.0);
+		vec3 N=normalize(vec3(-CE(ro-v.xyy)+CE(ro+v.xyy),-CE(ro-v.yxy)+CE(ro+v.yxy),-CE(ro-v.yyx)+CE(ro+v.yyx)));
+		mcol*=0.1666;
+		float refl=mcol.w;
+		vec3 scol=mcol.rgb*max(0.1,0.25+dot(N,L)*0.75);
+		scol*=FuzzyShadow(ro,L,SHADOW_CONE_GRAD);//the cone grad could be calculated for each lights position
+		scol+=refl*FuzzyReflection(ro,reflect(rd,N),REFLECTION_CONE_GRAD);//each material could have a separate cone
+		col=mix(scol,col,clamp(t*0.05,0.0,1.0));
+	}
+	col*=1.25;
+	gl_FragColor = vec4(clamp(col,0.0,1.0),1.0);
+}
+

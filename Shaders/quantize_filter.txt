@@ -1,0 +1,35 @@
+//
+//	Simple quantization
+//
+//
+uniform float time;
+uniform vec2 mouse;
+uniform vec2 resolution;
+uniform sampler2D tex0;
+
+const vec4 grayScaleWeights = vec4(0.30, 0.59, 0.11, 0.0);
+
+void main() 
+{ 
+	float numColors = mouse.x*10.0;
+	float gamma = mouse.y;
+
+	if(numColors < 2.0) numColors = 2.0;
+
+	// lookup input color
+	vec2 texCoord = gl_TexCoord[0].st;
+	vec4 c = texture2D(tex0, texCoord);
+	
+	// calculate luminance
+	float lum = dot(c, grayScaleWeights);
+
+	vec3 tc = c.rgb;
+	tc = pow(tc, vec3(gamma, gamma, gamma));
+	tc = tc * numColors;
+	tc = floor(tc);
+	tc = tc / numColors;
+	tc = pow(tc, vec3(1.0 / gamma));
+
+	gl_FragColor = vec4(tc, 1.0);
+
+}

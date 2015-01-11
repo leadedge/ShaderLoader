@@ -1,0 +1,23 @@
+//
+//
+// dual-texture_example.txt
+//
+// Test of two texture inputs - tex0 and tex1
+// Not supposed to do anything except test whether the two textures are received OK
+//
+
+uniform float time;
+uniform vec2 mouse;
+uniform vec2 resolution;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
+
+void main(void) {
+
+    vec4 c0 = texture2D(tex0, gl_TexCoord[0].xy);
+    vec4 c1 = texture2D(tex1, gl_TexCoord[0].xy);
+    
+    gl_FragColor = mix(c0, c1, 0.5);
+
+
+}

@@ -1,0 +1,75 @@
+//
+//
+// vlahos chroma key
+//
+// Modification of : https://www.shadertoy.com/view/MsS3DW#
+// With ideas from : http://magicmusicvisuals.com/forums/viewtopic.php?f=3&t=220
+//
+// Allows for user definition of the key colour with user inputs
+// from the Freeframe plugin controls of ShaderLoader
+//
+// First texture is the "green screen" picture - the foreground
+// Second texture is the background
+// Red, Green and Blue user inputs define the key colour
+//
+// Original had R = 0.350, G = 0.587, B = 0.164
+//
+
+float th = 8.0; // threshold
+float a2 = 1.2;
+float spill = 1.0;
+
+vec3 bgColor = inputColour.rgb; // ShaderLoader specific uniform linked to user controls
+
+float getAlpha(vec4 c){
+
+    // First Vlahos assumption: Gf <= a2Bf	
+    return 1.0 - th*(c.g-a2*(max(c.r, c.b)));
+
+}
+
+vec4 despill(vec4 c){
+
+    // Second Vlahos assumption: max (Gf - Bf,0) <= max(Bf - Rf, 0)
+    float sub = max(c.g - mix(c.b, c.r, 0.45), 0.0);
+    c.g -= sub;
+	
+    /*
+    // Original
+    c.a -= smoothstep(0.25, 0.5, sub*c.a);
+
+    // restore luminance (kind of, I slightly reduced the green weight)
+    // Original
+    float luma = dot(c.rgb, vec3(0.350, 0.587,0.164));
+    c.r += sub*c.r*2.0*.350/luma;
+    c.g += sub*c.g*2.0*.587/luma;
+    c.b += sub*c.b*2.0*.164/luma;
+    */
+
+    // Magic version
+    float amt = .75*iMouse.x/iResolution.x;
+    c.a -= smoothstep(amt, amt+.25, sub*c.a);
+	
+    //restore luminance (kind of, I slightly reduced the green weight)
+    float luma = dot(c.rgb, bgColor);
+    c.r += sub*c.r*2.0*bgColor.r/luma;
+    c.g += sub*c.g*2.0*bgColor.g/luma;
+    c.b += sub*c.b*2.0*bgColor.b/luma;
+
+
+    return c;
+}
+
+void main(void)
+{
+    vec4 fg = texture2D(iChannel0, gl_FragCoord.xy/iResolution.xy);
+    vec4 bg = texture2D(iChannel1, gl_FragCoord.xy/iResolution.xy);
+	
+    fg.a = clamp(getAlpha(fg), 0.0, 1.0);
+    fg = despill(fg);
+	
+    gl_FragColor.rgb = bg.rgb*(1.0-fg.a) + fg.rgb*fg.a; // For two inputs
+    // gl_FragColor.rgba = vec4(fg.rgb*fg.a, fg.a); // For an output alpha mask
+
+
+}

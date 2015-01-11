@@ -1,0 +1,21 @@
+//
+//	Colour input example
+//
+//	Uses the ShaderLoader specific "inputColour"
+//
+//	This is linked to user controls for Red, Green, Blue and Alpha
+//
+// For a GLSL Sandbox shader, the uniforms are contained
+// within the shader file, so "colourInput" has to be included
+//
+// uniform vec4 inputColour; // specific for ShaderLoader
+//
+//
+// For a ShaderToy shader, the additional "colourInput" uniform
+// is included by ShaderLoader, so can be referred to in the shader.
+//
+
+void main(void)
+{
+    gl_FragColor = vec4(inputColour.r, inputColour.g, inputColour.b, inputColour.a);
+} 

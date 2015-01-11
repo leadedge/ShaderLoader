@@ -1,21 +1,35 @@
 ﻿Installation
 
-“ShaderLoader.dll” must then be copied into the plugin folder for the host application.
+“ShaderLoader.dll” must then be copied into 
+the plugin folder for the host application.
 
-For “Resolume Avenue” or “Resolume Arena”, you can copy them to the default plugin “vfx” folder. Or you can define specific folders for effects.
+For “Resolume Avenue” or “Resolume Arena”, 
+you can copy them to the default plugin “vfx” folder. 
+Or you can define specific folders for effects.
 
-For "Isadora" copy to the Program files "..\Common Files\Freeframe" folder. Create this folder if it does not exist.
+For "Isadora" copy to the Program files "..\Common Files\Freeframe" folder. 
+Create this folder if it does not exist.
 
-Magic allows "additional module folders" to be defined so using the "..\Common Files\Freeframe" folder is a good idea.
+Magic allows "additional module folders" to be defined so using 
+the "..\Common Files\Freeframe" folder is a good idea.
 
-"SpoutPanel.exe" from the Spout project, is provided with ShaderLoader and should be copied to the same folder as the host executable to enable the file selection and warning dialogs. The latest Version 2.03 (after 9th January 2015) is required.
+"SpoutPanel.exe" from the Spout project, is provided with ShaderLoader
+and should be copied to the same folder as the host executable to enable
+the file selection and warning dialogs. The latest Version 2.03 
+(after 9th January 2015) is required.
 
 Shader path
 
-Shader files can be located in any folder, but if you want to use a simple name entry instead of the full path, they have to be in a known folder.
+Shader files can be located in any folder, but if you want to use
+a simple name entry instead of the full path, they have to be in a known folder.
 
-This can be either the same folder as the ShaderLoader plugin or in a sub-folder under that folder called "Shaders". 
+This can be either the same folder as the ShaderLoader plugin
+or in a sub-folder under that folder called "Shaders". 
 
-For example you might have put the ShaderLoader plugin in "..\Program files\Common Files\Freeframe" folder. If so, you can create a sub-folder "..\Program files\Common Files\Freeframe\Shaders" and put all the shader files in that. The same applies for any folder where the ShaderLoader plugin is located.
+For example you might have put the ShaderLoader plugin in 
+"..\Program files\Common Files\Freeframe" folder. 
+If so, you can create a sub-folder "..\Program files\Common Files\Freeframe\Shaders"
+and put all the shader files in that. 
+The same applies for any folder where the ShaderLoader plugin is located.
 
 Further details are in the ShaderLoader pdf.

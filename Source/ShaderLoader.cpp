@@ -7,7 +7,11 @@
 //		------------------------------------------------------------
 //		Revisions :
 //		11-01-15	Version 1.000
-//
+//		14-01-15	Included GetInputStatus to show whether texture inputs are being used or not
+//					Limited viewport check in ProcessOpenGL to Isadora - no way to test difference
+//		15-01-15	Started global time clock on shader load
+//		16-01-15	Used PathAddExtension to fix "." in path problem
+//					Vesrion 1.001
 //		------------------------------------------------------------
 //
 //		Copyright (C) 2015. Lynn Jarvis, Leading Edge. Pty. Ltd.
@@ -80,7 +84,7 @@ static CFFGLPluginInfo PluginInfo (
 	1,						   			// API major version number 													
 	000,								// API minor version number	
 	1,									// Plugin major version number
-	000,								// Plugin minor version number
+	001,								// Plugin minor version number
 	FF_EFFECT,							// Plugin type
 	"FreeFrame GLSL shader loader\nLoad shaders from GLSL Sandbox and Shadertoy\nFiles should be saved as text '.txt'.",		// Plugin description
 	"by Lynn Jarvis - spout.zeal.co"	// About
@@ -105,7 +109,7 @@ ShaderLoader::ShaderLoader():CFreeFrameGLPlugin()
 {
 	HMODULE module;
 	char path[MAX_PATH];
-	char HostName[MAX_PATH];
+	// char HostName[MAX_PATH];
 
 	/*
 	// Debug console window so printf works
@@ -115,6 +119,7 @@ ShaderLoader::ShaderLoader():CFreeFrameGLPlugin()
 	printf("Shader Loader Vers 1.002\n");
 	printf("GLSL version [%s]\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
 	*/
+
 
 	// Input properties allow for no texture or for two textures
 	SetMinInputs(0);
@@ -139,14 +144,14 @@ ShaderLoader::ShaderLoader():CFreeFrameGLPlugin()
 	// Find the host executable name
 	module = GetModuleHandle(NULL);
 	GetModuleFileNameA(module, path, MAX_PATH);
-	_splitpath_s(path, NULL, 0, NULL, 0, HostName, MAX_PATH, NULL, 0);
+	_splitpath_s(path, NULL, 0, NULL, 0, m_HostName, MAX_PATH, NULL, 0);
 	
 	// Isadora and Resolume act on button down.
 	// Isadora activates all parameters on plugin load.
 	// To prevent the file selection dialog pop up on load, allow one cycle for starting.
 	// Magic and default Windows apps react on button-up, so when the dll loads
 	// the parameters are not activated and all is OK.
-	if(strstr(HostName, "Avenue") == 0 || strstr(HostName, "Arena") == 0 || strstr(HostName, "Isadora") == 0) {
+	if(strstr(m_HostName, "Avenue") == 0 || strstr(m_HostName, "Arena") == 0 || strstr(m_HostName, "Isadora") == 0) {
 		bStarted = false;
 	}
 	else {
@@ -154,14 +159,16 @@ ShaderLoader::ShaderLoader():CFreeFrameGLPlugin()
 	}
 
 	// Set defaults
-	elapsedTime           = 0.0;
-	startTime             = 0.0;
-	lastTime              = 0.0;
-	PCFreq                = 0.0;
-	CounterStart          = 0;
-	m_time                = 0; // user modified elapsed time
+	elapsedTime            = 0.0;
+	startTime              = 0.0;
+	lastTime               = 0.0;
+	PCFreq                 = 0.0;
+	CounterStart           = 0;
+	m_time                 = 0; // user modified elapsed time
 
 	// defaults
+	m_depth                = 1.0;
+
 
 	m_mouseX               = 0.5;
 	m_mouseY               = 0.5;
@@ -184,10 +191,23 @@ ShaderLoader::ShaderLoader():CFreeFrameGLPlugin()
 	m_channelTime[2]       = 0.0;
 	m_channelTime[3]       = 0.0;
 
-	m_channelResolution[0] = 0.0;
-	m_channelResolution[1] = 0.0;
-	m_channelResolution[2] = 0.0;
-	m_channelResolution[3] = 0.0;
+	// 0 is width
+	m_channelResolution[0][0] = 0.0;
+	m_channelResolution[0][1] = 0.0;
+	m_channelResolution[0][2] = 0.0;
+	m_channelResolution[0][3] = 0.0;
+
+	// 1 is height
+	m_channelResolution[1][0] = 0.0;
+	m_channelResolution[1][1] = 0.0;
+	m_channelResolution[1][2] = 0.0;
+	m_channelResolution[1][3] = 0.0;
+
+	// 2 is depth
+	m_channelResolution[2][0] = 1.0;
+	m_channelResolution[2][1] = 1.0;
+	m_channelResolution[2][2] = 1.0;
+	m_channelResolution[2][2] = 1.0;
 
 	m_UserSpeed            = 0.5;
 	m_UserMouseX           = 0.5;
@@ -226,6 +246,8 @@ DWORD ShaderLoader::InitGL(const FFGLViewportStruct *vp)
 
 	// Problem noted that this viewport size might not match 
 	// the viewport size in ProcessOpenGL so it is calculated later.
+	m_vpWidth  = (float)vp->width;
+	m_vpHeight = (float)vp->height;
 
 	// Start the clock
 	StartCounter();
@@ -296,11 +318,14 @@ DWORD ShaderLoader::ProcessOpenGL(ProcessOpenGLStruct *pGL)
 		// Set the global resolution to the viewport size
 		// Get the viewport dimensions from OpenGL for certainty
 		// TODO - user control over the resolution for a source textures of different size
-		float vpdim[4];
-		glGetFloatv(GL_VIEWPORT, vpdim);
-		m_vpWidth  = vpdim[2];
-		m_vpHeight = vpdim[3];
-		m_depth = 1.0;
+		// 14.01.15 - limited to Isadora
+		if(strstr(m_HostName, "Isadora") != 0) {
+			float vpdim[4];
+			glGetFloatv(GL_VIEWPORT, vpdim);
+			// printf("Viewport = %dx%d (%dx%d)\n", (int)m_vpWidth, (int)m_vpHeight, (int)vpdim[2], (int)vpdim[3]);
+			m_vpWidth  = vpdim[2];
+			m_vpHeight = vpdim[3];
+		}
 
 		// Is there is texture needed by the shader ?
 		if(m_inputTextureLocation >= 0 || m_inputTextureLocation1 >= 0) {
@@ -424,11 +449,27 @@ DWORD ShaderLoader::ProcessOpenGL(ProcessOpenGLStruct *pGL)
 
 		// iResolution - viewport resolution
 		if(m_resolutionLocation >= 0) // Vec3
-			m_extensions.glUniform3fARB(m_resolutionLocation, m_vpWidth, m_vpHeight, 0.0); 
+			m_extensions.glUniform3fARB(m_resolutionLocation, m_vpWidth, m_vpHeight, 1.0); 
 
 		// TODO - Texture resolutions
-		// if(m_channelresolutionLocation >= 0) // Vec3
-		//	m_extensions.glUniform3fARB(m_resolutionLocation, m_width, m_height, 0.0); 
+		if(m_channelresolutionLocation >= 0) {
+			// Vec3 with 4 possibilities
+
+			// 0 is width
+			m_channelResolution[0][0] = m_vpWidth;
+			m_channelResolution[0][1] = m_vpWidth;
+			m_channelResolution[0][2] = m_vpWidth;
+			m_channelResolution[0][3] = m_vpWidth;
+
+			// 1 is height
+			m_channelResolution[1][0] = m_vpHeight;
+			m_channelResolution[1][1] = m_vpHeight;
+			m_channelResolution[1][2] = m_vpHeight;
+			m_channelResolution[1][3] = m_vpHeight;
+
+			// 3 is depth - already 1.0
+			m_extensions.glUniform3fARB(m_resolutionLocation, *m_channelResolution[0], *m_channelResolution[1], *m_channelResolution[2]); 
+		}
 
 		// iDate
 		if(m_dateLocation >= 0) 
@@ -513,15 +554,87 @@ DWORD ShaderLoader::ProcessOpenGL(ProcessOpenGLStruct *pGL)
 	return FF_SUCCESS;
 }
 
+char * ShaderLoader::GetParameterDisplay(DWORD dwIndex) {
+
+	memset(m_DisplayValue, 0, 15);
+	
+	switch (dwIndex) {
+
+		case FFPARAM_SPEED:
+			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserSpeed*100.0));
+			return m_DisplayValue;
+	
+		case FFPARAM_MOUSEX:
+			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserMouseX*m_width));
+			return m_DisplayValue;
+
+		case FFPARAM_MOUSEY:
+			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserMouseY*m_height));
+			return m_DisplayValue;
+
+		case FFPARAM_MOUSELEFTX:
+			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserMouseLeftX*m_width));
+			return m_DisplayValue;
+
+		case FFPARAM_MOUSELEFTY:
+			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserMouseLeftY*m_height));
+			return m_DisplayValue;
+
+		case FFPARAM_RED:
+			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserRed*256.0));
+			return m_DisplayValue;
+
+		case FFPARAM_GREEN:
+			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserGreen*256.0));
+			return m_DisplayValue;
+
+		case FFPARAM_BLUE:
+			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserBlue*256.0));
+			return m_DisplayValue;
+
+		case FFPARAM_ALPHA:
+			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserAlpha*256.0));
+			return m_DisplayValue;
+
+		default:
+			return m_DisplayValue;
+	}
+	return NULL;
+
+}
+
+DWORD ShaderLoader::GetInputStatus(DWORD dwIndex)
+{
+	DWORD dwRet = FF_INPUT_NOTINUSE;
+
+	switch (dwIndex) {
+
+		case 0 :
+			if(m_inputTextureLocation >= 0)
+				dwRet = FF_INPUT_INUSE;
+			break;
+
+		case 1 :
+			if(m_inputTextureLocation1 >= 0)
+				dwRet = FF_INPUT_INUSE;
+			break;
+
+		default :
+			break;
+
+	}
+
+	return dwRet;
+
+}
+
+
+
 DWORD ShaderLoader::GetParameter(DWORD dwIndex)
 {
 	DWORD dwRet;
 
 	switch (dwIndex) {
-
-		case FFPARAM_FILENAME:
-			dwRet = (DWORD)m_UserShaderName;
-			return dwRet;
 
 		case FFPARAM_SPEED:
 			*((float *)(unsigned)&dwRet) = m_UserSpeed;
@@ -597,36 +710,29 @@ DWORD ShaderLoader::SetParameter(const SetParameterStruct* pParam)
 						firstLength = strlen(filename);
 
 						// Could be a full path or just a name so strip out the name
-						PathStripPathA(filename);
+						PathStripPathA(filename); // Removes the path portion of a fully qualified path and file
 						secondLength = strlen(filename);
 
 						if(firstLength != secondLength) { 
 							// path has been stripped and we now have a filename
 							// if there is no extension, add one
-							AddExtension(filename, "txt");
-							AddExtension(filepath, "txt");
-							// Copy to user entries for update
-							strcpy_s(m_UserShaderName, MAX_PATH, filename);
-							strcpy_s(m_UserShaderPath, MAX_PATH, filepath);
+							PathAddExtension(filename, ".txt");
+							PathAddExtension(filepath, ".txt");
 						}
 						else { 	// Just a name was entered 
-
 							// if there is no extension, add one
-							AddExtension(filename, "txt");
-							AddExtension(filepath, "txt");
-							
+							PathAddExtension(filename, ".txt");
+							PathAddExtension(filepath, ".txt");
 							// Add the dll path assuming the shader is in the same folder
 							AddModulePath(filename, filepath);
-							
-							// Copy to user entries for update
-							strcpy_s(m_UserShaderName, MAX_PATH, filename);
-							strcpy_s(m_UserShaderPath, MAX_PATH, filepath);
-							
 						}
 
 						// Now we have filename and filepath so set the user entries
 						strcpy_s(m_UserShaderPath, MAX_PATH, filepath);
 						strcpy_s(m_UserShaderName, MAX_PATH, filename);
+
+						// printf("Path [%s]\n", m_UserShaderPath);
+						// printf("Name [%s]\n", m_UserShaderName);
 
 						// On load, try to load a shader from the path entered
 						// This is a one-off event so will not be done again
@@ -815,7 +921,7 @@ bool ShaderLoader::LoadShaderFile(const char *ShaderPath)
 									  "uniform vec4 iMouse;\n"
 									  "uniform vec4 iDate;\n"
 									  "uniform float iChannelTime[4];\n"
-									  // TODO "uniform vec3 iChannelResolution[4];\n"
+									  "uniform vec3 iChannelResolution[4];\n"
 									  "uniform sampler2D iChannel0;\n"
 									  "uniform sampler2D iChannel1;\n"
 									  "uniform sampler2D iChannel2;\n"
@@ -853,7 +959,7 @@ bool ShaderLoader::LoadShaderFile(const char *ShaderPath)
 				m_mouseLocationVec4			 = -1;
 				m_dateLocation				 = -1;
 				m_resolutionLocation		 = -1;
-				// m_channelresolutionLocation  = -1; // TODO
+				m_channelresolutionLocation  = -1; // TODO
 				m_inputTextureLocation		 = -1;
 				m_inputTextureLocation1		 = -1;
 				m_inputTextureLocation2		 = -1;
@@ -982,8 +1088,8 @@ bool ShaderLoader::LoadShaderFile(const char *ShaderPath)
 					m_channeltimeLocation = m_shader.FindUniform("iChannelTime[4]");
 
 				// TODO - iChannelResolution
-				// if(m_channelresolutionLocation < 0) // Vec3
-				//	m_channelresolutionLocation = m_shader.FindUniform("iChannelResolution[4]");
+				if(m_channelresolutionLocation < 0) // Vec3 width, height, depth * 4
+					m_channelresolutionLocation = m_shader.FindUniform("iChannelResolution[4]");
 
 				// ShaderLoader : inputColour - linked to user input
 				if(m_inputColourLocation < 0)
@@ -1004,6 +1110,10 @@ bool ShaderLoader::LoadShaderFile(const char *ShaderPath)
 
 				// Set the global path to registry because all went well
 				WritePathToRegistry(m_ShaderPath, "Software\\Leading Edge\\FFGLshaderloader", "Filepath");
+
+				// Start the clock again to start from zero
+				StartCounter();
+
 
 				return true;
 
@@ -1142,23 +1252,6 @@ bool ShaderLoader::AddModulePath(const char *username, char *userpath)
 
 
 	return true;
-}
-
-
-void ShaderLoader::AddExtension(char *filename, const char *extension)
-{
-	char *where = NULL;
-	char name[MAX_PATH];
-
-	strcpy_s(name, MAX_PATH, filename);
-
-	// Has the filename got an extension already?
-	where = strchr(name, '.');
-	if(where) *where = 0; // If so, remove the existing extension
-
-	// Add the extension passed
-	sprintf_s(filename, 256, "%s.%s", name, extension);
-
 }
 
 

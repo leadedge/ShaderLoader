@@ -43,6 +43,9 @@ public:
 	DWORD InitGL(const FFGLViewportStruct *vp);
 	DWORD DeInitGL();
 
+	DWORD GetInputStatus(DWORD dwIndex);
+	char * GetParameterDisplay(DWORD dwIndex);
+
 	///////////////////////////////////////////////////
 	// Factory method
 	///////////////////////////////////////////////////
@@ -56,11 +59,13 @@ public:
 protected:	
 
 	// FFGL user parameters
+	char  m_HostName[MAX_PATH];
 	char  m_ShaderPath[MAX_PATH];
 	char  m_ShaderName[256];
 	char  m_UserInput[MAX_PATH];
 	char  m_UserShaderName[256];
 	char  m_UserShaderPath[MAX_PATH];
+	char  m_DisplayValue[16];
 	float m_UserSpeed;
 	float m_UserMouseX;
 	float m_UserMouseY;
@@ -108,8 +113,8 @@ protected:
 	// iChannelTime components are always equal to iGlobalTime
 	float m_channelTime[4];
 
-	// Channel resolution in pixels
-	float m_channelResolution[4];
+	// Channel resolution in pixels - 4 channels with width, heith, depth each
+	float m_channelResolution[3][4];
 
 	// Mouse
 	float m_mouseX;
@@ -159,7 +164,6 @@ protected:
 	double GetCounter();
 	HMODULE GetCurrentModule();
 	bool AddModulePath(const char *filename, char *filepath);
-	void AddExtension(char *filename, const char *extension);
 	bool LoadShaderFile(const char *path);
 	bool WritePathToRegistry(const char *filepath, const char *subkey, const char *valuename);
 	bool ReadPathFromRegistry(const char *filepath, const char *subkey, const char *valuename);

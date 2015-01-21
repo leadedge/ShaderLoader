@@ -1,0 +1,35 @@
+//
+// https://www.shadertoy.com/view/ldBXDd
+//
+
+//
+// Crease Machine - by timeiskey
+//
+
+void main(void)
+{
+	vec2 p = gl_FragCoord.xy / iResolution.xy;
+    
+    
+    
+    
+    //shape position
+    vec2 shapeCenter = vec2( 0.5, 0.5);
+    //distance from pixel to shape center
+    vec2 distanceToShape = p - shapeCenter;
+    
+    //color vector
+    vec3 col = vec3( 0.0, 1.0, 1.0 );
+    
+    //shape radius
+    float shapeRadius = 0.2 + 0.1*cos( atan(distanceToShape.x, distanceToShape.y)
+                                      *iGlobalTime );
+    //shape sharpness (smaller is sharper)
+    float sharpnessMod = 0.008;
+
+    col *=  smoothstep( shapeRadius, shapeRadius+sharpnessMod, length(distanceToShape));
+    col = vec3( 1.0, 1.0, 1.0) - col;
+    
+    //finally changes the color
+	gl_FragColor = vec4(col,1.0);
+}

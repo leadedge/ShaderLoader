@@ -1,0 +1,16 @@
+//
+// https://www.shadertoy.com/view/lsf3R4
+//
+
+//
+// Wavy Texture
+//
+
+void main(void)
+{
+	vec2 uv = gl_FragCoord.xy / iResolution.xy;
+	uv.y += (sin((uv.x + (iGlobalTime * 0.5)) * 10.0) * 0.1) + 
+		(sin((uv.x + (iGlobalTime * 0.2)) * 32.0) * 0.01);
+	vec4 texColor = texture2D(iChannel0, uv);
+	gl_FragColor = texColor;
+}

@@ -1,0 +1,39 @@
+//
+// Texture Swirl
+//
+// https://www.shadertoy.com/view/4sBXRc
+//
+
+// Does not work without a noise image on Channel1 - tex12
+// Channel0 is the texture to swirl
+//
+
+float noise( in vec3 x ) // From iq
+{
+    vec3 p = floor(x);
+    vec3 f = fract(x);
+	f = f*f*(3.0-2.0*f);
+	
+	vec2 uv = (p.xy+vec2(37.0,17.0)*p.z) + f.xy;
+	vec2 rg = texture2D( iChannel1, (uv+0.5)/256.0, -100.0 ).yx;
+	return mix( rg.x, rg.y, f.z )*2.0 - 1.0;
+}
+
+vec2 offset(vec2 p, float phase) {
+	return vec2(noise(vec3(p.xy*10.0+iGlobalTime*0.25,phase)),
+                noise(vec3(p.yx*10.0+iGlobalTime*0.25,phase)))*0.02;
+}
+
+void main(void)
+{
+	vec2 p = gl_FragCoord.xy / iResolution.xy * vec2(1, -1);
+	p.x *= iResolution.x / iResolution.y;
+    vec4 color = vec4(1);
+    for (int i = 0; i < 3; i++) {
+		float phase = float(i)/3.0;
+		vec4 s1 = texture2D(iChannel0, p + offset(p, fract(phase)));
+		vec4 s2 = texture2D(iChannel0, p + offset(p, fract(phase+0.5)));
+		color += mix(s1, s2, abs(mod(phase*2.0, 2.0)-1.0))*color*color;
+    }
+    gl_FragColor = (color)/15.0;
+}

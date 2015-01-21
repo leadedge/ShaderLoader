@@ -113,8 +113,8 @@ protected:
 	// iChannelTime components are always equal to iGlobalTime
 	float m_channelTime[4];
 
-	// Channel resolution in pixels - 4 channels with width, heith, depth each
-	float m_channelResolution[3][4];
+	// Channel resolution in pixels - 4 channels with width, height, depth each
+	float m_channelResolution[4][3];
 
 	// Mouse
 	float m_mouseX;
@@ -130,11 +130,6 @@ protected:
 	float m_width;
 	float m_height;
 	float m_depth;
-
-	// TODO
-	float m_channelWidth[4];
-	float m_channelHeight[4];
-	float m_channelDepth[4];
 
 	int m_initResources;
 	FFGLExtensions m_extensions;
@@ -170,7 +165,7 @@ protected:
 	bool SelectSpoutPanel(const char *message);
 	bool OpenEditor(const char *filename);
 	bool CheckSpoutPanel();
-	void CreateRectangleTexture(FFGLTextureStruct Texture, FFGLTexCoords maxCoords, GLuint &glTexture, GLuint &fbo, GLuint hostFbo);
+	void CreateRectangleTexture(FFGLTextureStruct Texture, FFGLTexCoords maxCoords, GLuint &glTexture, GLenum texunit, GLuint &fbo, GLuint hostFbo);
 
 };
 

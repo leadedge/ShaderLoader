@@ -79,13 +79,16 @@ protected:
 	bool bInitialized;
 	bool bStarted;
 	bool bDialogOpen;
-	SHELLEXECUTEINFOA ShExecInfo;
 	bool bSpoutPanelOpened;
+
+	SHELLEXECUTEINFOA ShExecInfo;
+	HWND hwndEditor;
 
 	// Local fbo and texture
 	GLuint m_glTexture0;
 	GLuint m_glTexture1;
 	GLuint m_glTexture2;
+	GLuint m_glTexture3;
 	GLuint m_fbo;
 
 	// Viewport
@@ -126,11 +129,6 @@ protected:
 	float m_mouseRightX;
 	float m_mouseRightY;
 
-	// Resolution
-	float m_width;
-	float m_height;
-	float m_depth;
-
 	int m_initResources;
 	FFGLExtensions m_extensions;
     FFGLShader m_shader;
@@ -155,11 +153,13 @@ protected:
 	// ShaderLoader extras
 	GLint m_inputColourLocation;
 
+	void SetDefaults();
 	void StartCounter();
 	double GetCounter();
 	HMODULE GetCurrentModule();
 	bool AddModulePath(const char *filename, char *filepath);
 	bool LoadShaderFile(const char *path);
+	bool LoadShader(std::string shaderString);
 	bool WritePathToRegistry(const char *filepath, const char *subkey, const char *valuename);
 	bool ReadPathFromRegistry(const char *filepath, const char *subkey, const char *valuename);
 	bool SelectSpoutPanel(const char *message);

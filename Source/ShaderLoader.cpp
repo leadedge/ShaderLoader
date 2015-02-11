@@ -18,7 +18,10 @@
 //					Version 1.002
 //		20-01-15	Got iChannelResolution and iChannelTime working properly
 //					All resolutions locked to viewport dimensions
+//		21-01-15	Cleanup. Prepare for 4 input textures
 //					Version 1.003
+//		10.02.15	Cleanup - remove leftover print statements
+//					Version 1.004
 //		------------------------------------------------------------
 //
 //		Copyright (C) 2015. Lynn Jarvis, Leading Edge. Pty. Ltd.
@@ -94,7 +97,7 @@ static CFFGLPluginInfo PluginInfo (
 	1,						   			// API major version number 													
 	000,								// API minor version number	
 	1,									// Plugin major version number
-	003,								// Plugin minor version number
+	004,								// Plugin minor version number
 	FF_EFFECT,							// Plugin type
 	"FreeFrame GLSL shader loader\nLoad shaders from GLSL Sandbox and Shadertoy\nFiles should be saved as text '.txt'.",		// Plugin description
 	"by Lynn Jarvis - spout.zeal.co"	// About
@@ -125,13 +128,13 @@ ShaderLoader::ShaderLoader():CFreeFrameGLPlugin()
 	FILE* pCout; // should really be freed on exit 
 	AllocConsole();
 	freopen_s(&pCout, "CONOUT$", "w", stdout); 
-	printf("Shader Loader Vers 1.003\n");
+	printf("Shader Loader Vers 1.004\n");
 	printf("GLSL version [%s]\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
 	*/
 
 	// Input properties allow for no texture or for two textures
 	SetMinInputs(0);
-	SetMaxInputs(2);
+	SetMaxInputs(2); // TODO - 4 inputs
 
 	// Parameters
 	SetParamInfo(FFPARAM_FILENAME,      "Shader Name",   FF_TYPE_TEXT,     "");
@@ -167,66 +170,7 @@ ShaderLoader::ShaderLoader():CFreeFrameGLPlugin()
 	}
 
 	// Set defaults
-	elapsedTime            = 0.0;
-	startTime              = 0.0;
-	lastTime               = 0.0;
-	PCFreq                 = 0.0;
-	CounterStart           = 0;
-	m_time                 = 0; // user modified elapsed time
-
-	// defaults
-	m_depth                = 1.0;
-
-
-	m_mouseX               = 0.5;
-	m_mouseY               = 0.5;
-	m_mouseLeftX           = 0.5;
-	m_mouseLeftY           = 0.5;
-
-	m_UserMouseX           = 0.5;
-	m_UserMouseY           = 0.5;
-	m_UserMouseLeftX       = 0.5;
-	m_UserMouseLeftY       = 0.5;
-
-	m_time                 = 0.0;
-	m_dateYear             = 0.0;
-	m_dateMonth            = 0.0;
-	m_dateDay              = 0.0;
-	m_dateTime             = 0.0;
-
-	m_channelTime[0]       = 0.0;
-	m_channelTime[1]       = 0.0;
-	m_channelTime[2]       = 0.0;
-	m_channelTime[3]       = 0.0;
-
-	// Vec3 - 4 channels 
-	m_channelResolution[0][0] = 0.0; // 0 is width
-	m_channelResolution[0][1] = 0.0; // 1 is height
-	m_channelResolution[0][2] = 1.0; // 2 is depth
-
-	m_channelResolution[1][0] = 0.0;
-	m_channelResolution[1][1] = 0.0;
-	m_channelResolution[1][2] = 1.0;
-
-	m_channelResolution[2][0] = 0.0;
-	m_channelResolution[2][1] = 0.0;
-	m_channelResolution[2][2] = 1.0;
-
-	m_channelResolution[3][0] = 0.0;
-	m_channelResolution[3][1] = 0.0;
-	m_channelResolution[4][2] = 1.0;
-
-	m_UserSpeed            = 0.5;
-	m_UserMouseX           = 0.5;
-	m_UserMouseY           = 0.5;
-	m_UserMouseLeftX       = 0.5;
-	m_UserMouseLeftY       = 0.5;
-
-	// OpenGL
-	m_glTexture0           = 0;
-	m_glTexture1           = 0;
-	m_glTexture2           = 0; // TODO
-	m_fbo                  = 0;
+	SetDefaults();
 
 	// Flags
 	bSpoutPanelOpened      = false;
@@ -255,6 +199,8 @@ DWORD ShaderLoader::InitGL(const FFGLViewportStruct *vp)
 	// the viewport size in ProcessOpenGL so it is calculated later.
 	m_vpWidth  = (float)vp->width;
 	m_vpHeight = (float)vp->height;
+
+	// printf("InitGL - viewport (%f x %f)\n", m_vpWidth, m_vpHeight);
 
 	// Start the clock
 	StartCounter();
@@ -290,10 +236,12 @@ DWORD ShaderLoader::DeInitGL()
 	if(m_fbo) m_extensions.glDeleteFramebuffersEXT(1, &m_fbo);
 	if(m_glTexture0) glDeleteTextures(1, &m_glTexture0);
 	if(m_glTexture1) glDeleteTextures(1, &m_glTexture1);
-	if(m_glTexture2) glDeleteTextures(1, &m_glTexture2); // TODO
+	if(m_glTexture2) glDeleteTextures(1, &m_glTexture2);
+	if(m_glTexture3) glDeleteTextures(1, &m_glTexture3);
 	m_glTexture0 = 0;
 	m_glTexture1 = 0;
 	m_glTexture2 = 0;
+	m_glTexture3 = 0;
 	m_fbo = 0;
 	bInitialized = false;
 
@@ -322,39 +270,46 @@ DWORD ShaderLoader::ProcessOpenGL(ProcessOpenGLStruct *pGL)
 		// To the host this is an effect plugin, but it can be either a source or an effect
 		// and will work without any input, so we still start up if even there is no input texture
 
-		// Set the global resolution to the viewport size
+		// Set the global viewport resolution.
 		// Get the viewport dimensions from OpenGL for certainty
 		// 14.01.15 - limited to Isadora
-		if(strstr(m_HostName, "Isadora") != 0) {
+		// if(strstr(m_HostName, "Isadora") != 0) {
 			float vpdim[4];
 			glGetFloatv(GL_VIEWPORT, vpdim);
 			// printf("Viewport = %dx%d (%dx%d)\n", (int)m_vpWidth, (int)m_vpHeight, (int)vpdim[2], (int)vpdim[3]);
 			m_vpWidth  = vpdim[2];
 			m_vpHeight = vpdim[3];
+		// }
+
+		/*
+		// LJ DEBUG
+		if(m_inputTextureLocation >= 0) {
+			if(m_inputTextureLocation1 >= 0)
+				SetMinInputs(2);
+			else
+				SetMinInputs(1);
 		}
+		else
+			SetMinInputs(0);
+		*/
 
 		// Is there is texture needed by the shader ?
 		if(m_inputTextureLocation >= 0 || m_inputTextureLocation1 >= 0) {
 
 			// Is there a texture available ?
 			if(m_inputTextureLocation >= 0 && pGL->numInputTextures > 0 && pGL->inputTextures[0] != NULL) {
+
 				Texture0 = *(pGL->inputTextures[0]);
 				maxCoords = GetMaxGLTexCoords(Texture0);
-				// printf("Texture (%dx%d) Hardware (%dx%d)\n", Texture0.Width, Texture0.Height, Texture0.HardwareWidth, Texture0.HardwareHeight);
 
 				// Delete the local texture if the incoming size is different
 				if((int)m_channelResolution[0][0] != Texture0.Width || (int)m_channelResolution[0][1] != Texture0.Height) {
 					if(m_glTexture0 > 0) glDeleteTextures(1, &m_glTexture0);
-					// TODO - 4 channels
 				}
 
 				// Set the resolution of the first texture size
 				m_channelResolution[0][0] = (float)Texture0.Width;
 				m_channelResolution[0][1] = (float)Texture0.Height;
-
-				// TODO - global ?
-				m_width	 = (float)Texture0.Width;
-				m_height = (float)Texture0.Height;
 
 				// For a power of two texture, the size will be different to the hardware size.
 				// The shader will not compensate for this, so we have to create another texture
@@ -362,11 +317,9 @@ DWORD ShaderLoader::ProcessOpenGL(ProcessOpenGLStruct *pGL)
 				// textures created with wrapping REPEAT rather than CLAMP to edge
 				// So we create such a texture if the size changes and use it for every frame.
 				CreateRectangleTexture(Texture0, maxCoords, m_glTexture0, GL_TEXTURE0, m_fbo, pGL->HostFBO);
+
 				// Now we have a local texture of the right size and type
 				// Filled with the data from the incoming Freeframe texture
-
-				// printf("Hardware (%dx%d)\n", Texture0.HardwareWidth, Texture0.HardwareHeight);
-				// printf("Viewport (%dx%d)\n", (int)m_vpWidth, (int)m_vpHeight);
 			}
 
 			// Repeat if there is a second incoming texture and the shader needs it
@@ -385,23 +338,42 @@ DWORD ShaderLoader::ProcessOpenGL(ProcessOpenGLStruct *pGL)
 
 				CreateRectangleTexture(Texture1, maxCoords, m_glTexture1, GL_TEXTURE1, m_fbo, pGL->HostFBO);
 			}
-		} // endif shader uses a texture
-		else {
-			// TODO : redundant ? Always use viewport for global resolution.
-			m_width	 = m_vpWidth;
-			m_height = m_vpHeight;
-			// printf("Using viewport (%dx%d)\n", (int)m_width, (int)m_height);
-		}
 
-		// printf("Viewport (%dx%d)\n", (int)m_vpWidth, (int)m_vpHeight);
+			/*
+			// TODO - textures 3 and 4
+			if(m_inputTextureLocation2 >= 0 && pGL->numInputTextures > 2 && pGL->inputTextures[2] != NULL) {
+				Texture2 = *(pGL->inputTextures[2]);
+				maxCoords = GetMaxGLTexCoords(Texture2);
+				if((int)m_channelResolution[2][0] != Texture2.Width || (int)m_channelResolution[2][1] != Texture2.Height) {
+					if(m_glTexture2 > 0) glDeleteTextures(1, &m_glTexture2);
+				}
+				// Set the channel resolution of the second texture size
+				m_channelResolution[2][0] = (float)Texture2.Width;
+				m_channelResolution[2][1] = (float)Texture2.Height;
+				CreateRectangleTexture(Texture2, maxCoords, m_glTexture2, GL_TEXTURE1, m_fbo, pGL->HostFBO);
+			}
+
+			if(m_inputTextureLocation3 >= 0 && pGL->numInputTextures > 3 && pGL->inputTextures[3] != NULL) {
+				Texture3 = *(pGL->inputTextures[3]);
+				maxCoords = GetMaxGLTexCoords(Texture2);
+				if((int)m_channelResolution[3][0] != Texture3.Width || (int)m_channelResolution[3][1] != Texture3.Height) {
+					if(m_glTexture3 > 0) glDeleteTextures(1, &m_glTexture3);
+				}
+				// Set the channel resolution of the second texture size
+				m_channelResolution[3][0] = (float)Texture3.Width;
+				m_channelResolution[3][1] = (float)Texture3.Height;
+				CreateRectangleTexture(Texture3, maxCoords, m_glTexture3, GL_TEXTURE1, m_fbo, pGL->HostFBO);
+			}
+			*/
+
+		} // endif shader uses a texture
 
 		// Calculate elapsed time
 		lastTime = elapsedTime;
 		elapsedTime = GetCounter()/1000.0; // In seconds - higher resolution than timeGetTime()
-		// if(elapsedTime > FLT_MAX) m_time = 0.0; // allow for overflow ? - 1E+37 3.402823466e+38
 		m_time = m_time + (float)(elapsedTime-lastTime)*m_UserSpeed*2.0f; // increment scaled by user input 0.0 - 2.0
 
-		// Just pass elapsed time for individual channels
+		// Just pass elapsed time for individual channel times
 		m_channelTime[0] = m_time;
 		m_channelTime[1] = m_time;
 		m_channelTime[2] = m_time;
@@ -436,6 +408,15 @@ DWORD ShaderLoader::ProcessOpenGL(ProcessOpenGLStruct *pGL)
 		// The shader will use the texture bound to GL texture unit 1
 		if(m_inputTextureLocation1 >= 0 && Texture1.Handle > 0)
 			m_extensions.glUniform1iARB(m_inputTextureLocation1, 1);
+
+		/*
+		// 4 channels
+		if(m_inputTextureLocation2 >= 0 && Texture2.Handle > 0)
+			m_extensions.glUniform1iARB(m_inputTextureLocation2, 2);
+
+		if(m_inputTextureLocation3 >= 0 && Texture3.Handle > 0)
+			m_extensions.glUniform1iARB(m_inputTextureLocation3, 3);
+		*/
 
 		// Elapsed time
 		if(m_timeLocation >= 0) 
@@ -484,13 +465,12 @@ DWORD ShaderLoader::ProcessOpenGL(ProcessOpenGLStruct *pGL)
 		if(m_resolutionLocation >= 0) // Vec3
 			m_extensions.glUniform3fARB(m_resolutionLocation, m_vpWidth, m_vpHeight, 1.0); 
 
-		// Channel resolutions ar elinked to the actual texture resolutions - the size is set in ProcessOpenGL
+		// Channel resolutions are linked to the actual texture resolutions - the size is set in ProcessOpenGL
 		// Global resolution is the viewport
 		if(m_channelresolutionLocation >= 0) {
 			// uniform vec3	iChannelResolution[4]
 			// 4 channels Vec3. Float array is 4 rows, 3 cols
-			// TODO - 4 channels
-			// 2 & 3 are unused so will not have a texture anyway
+			// TODO - 4 channels - 2 & 3 are unused so will not have a texture anyway
 			m_channelResolution[2][0] = m_vpWidth;
 			m_channelResolution[2][1] = m_vpHeight;
 			m_channelResolution[2][2] = 1.0;
@@ -508,7 +488,7 @@ DWORD ShaderLoader::ProcessOpenGL(ProcessOpenGLStruct *pGL)
 		if(m_channeltimeLocation >= 0)
 			m_extensions.glUniform1fvARB(m_channeltimeLocation, 4, m_channelTime);
 
-		// ShaderLoader specific extras
+		// Extras
 		// Input colour is linked to the user controls Red, Green, Blue, Alpha
 		if(m_inputColourLocation >= 0)
 			m_extensions.glUniform4fARB(m_inputColourLocation, m_UserRed, m_UserGreen, m_UserBlue, m_UserAlpha);
@@ -532,8 +512,24 @@ DWORD ShaderLoader::ProcessOpenGL(ProcessOpenGLStruct *pGL)
 				glBindTexture(GL_TEXTURE_2D, Texture1.Handle);
 		}
 
-		// TODO - texture units 2 and 3
+		/*
+		// Texture units 2 and 3
+		if(m_inputTextureLocation2 >= 0 && Texture2.Handle > 0) {
+			m_extensions.glActiveTexture(GL_TEXTURE2);
+			if(m_glTexture2 > 0)
+				glBindTexture(GL_TEXTURE_2D, m_glTexture2);
+			else
+				glBindTexture(GL_TEXTURE_2D, Texture2.Handle);
+		}
 
+		if(m_inputTextureLocation3 >= 0 && Texture3.Handle > 0) {
+			m_extensions.glActiveTexture(GL_TEXTURE3);
+			if(m_glTexture3 > 0)
+				glBindTexture(GL_TEXTURE_2D, m_glTexture3);
+			else
+				glBindTexture(GL_TEXTURE_2D, Texture3.Handle);
+		}
+		*/
 		// Do the draw for the shader to work
 		glEnable(GL_TEXTURE_2D);
 		glBegin(GL_QUADS);
@@ -547,6 +543,20 @@ DWORD ShaderLoader::ProcessOpenGL(ProcessOpenGLStruct *pGL)
 		glVertex2f( 1.0, -1.0);
 		glEnd();
 		glDisable(GL_TEXTURE_2D);
+
+		/*
+		// unbind input texture 3
+		if(m_inputTextureLocation3 >= 0 && Texture3.Handle > 0) {
+			m_extensions.glActiveTexture(GL_TEXTURE3);
+			glBindTexture(GL_TEXTURE_2D, 0);
+		}
+
+		// unbind input texture 2
+		if(m_inputTextureLocation2 >= 0 && Texture2.Handle > 0) {
+			m_extensions.glActiveTexture(GL_TEXTURE2);
+			glBindTexture(GL_TEXTURE_2D, 0);
+		}
+		*/
 
 		// unbind input texture 1
 		if(m_inputTextureLocation1 >= 0 && Texture1.Handle > 0) {
@@ -598,19 +608,19 @@ char * ShaderLoader::GetParameterDisplay(DWORD dwIndex) {
 			return m_DisplayValue;
 	
 		case FFPARAM_MOUSEX:
-			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserMouseX*m_width));
+			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserMouseX*m_vpWidth));
 			return m_DisplayValue;
 
 		case FFPARAM_MOUSEY:
-			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserMouseY*m_height));
+			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserMouseY*m_vpHeight));
 			return m_DisplayValue;
 
 		case FFPARAM_MOUSELEFTX:
-			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserMouseLeftX*m_width));
+			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserMouseLeftX*m_vpWidth));
 			return m_DisplayValue;
 
 		case FFPARAM_MOUSELEFTY:
-			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserMouseLeftY*m_height));
+			sprintf_s(m_DisplayValue, 16, "%d", (int)(m_UserMouseLeftY*m_vpHeight));
 			return m_DisplayValue;
 
 		case FFPARAM_RED:
@@ -651,6 +661,18 @@ DWORD ShaderLoader::GetInputStatus(DWORD dwIndex)
 			if(m_inputTextureLocation1 >= 0)
 				dwRet = FF_INPUT_INUSE;
 			break;
+
+		/* TODO - 4 channels
+		case 2 :
+			if(m_inputTextureLocation2 >= 0)
+				dwRet = FF_INPUT_INUSE;
+			break;
+
+		case 3 :
+			if(m_inputTextureLocation3 >= 0)
+				dwRet = FF_INPUT_INUSE;
+			break;
+		*/
 
 		default :
 			break;
@@ -764,9 +786,6 @@ DWORD ShaderLoader::SetParameter(const SetParameterStruct* pParam)
 						// Now we have filename and filepath so set the user entries
 						strcpy_s(m_UserShaderPath, MAX_PATH, filepath);
 						strcpy_s(m_UserShaderName, MAX_PATH, filename);
-
-						// printf("Path [%s]\n", m_UserShaderPath);
-						// printf("Name [%s]\n", m_UserShaderName);
 
 						// On load, try to load a shader from the path entered
 						// This is a one-off event so will not be done again
@@ -989,7 +1008,7 @@ bool ShaderLoader::LoadShaderFile(const char *ShaderPath)
 				m_mouseLocationVec4			 = -1;
 				m_dateLocation				 = -1;
 				m_resolutionLocation		 = -1;
-				m_channelresolutionLocation  = -1; // TODO
+				m_channelresolutionLocation  = -1;
 				m_inputTextureLocation		 = -1;
 				m_inputTextureLocation1		 = -1;
 				m_inputTextureLocation2		 = -1;
@@ -999,7 +1018,7 @@ bool ShaderLoader::LoadShaderFile(const char *ShaderPath)
 				// m_surfacePositionLocation	= -1; // TODO
 				// m_vertexPositionLocation    = -1; // TODO
 
-				// ShaderLoader specific extras
+				// Extras
 				// Input colour is linked to the user controls Red, Green, Blue, Alpha
 				m_inputColourLocation        = -1;
 
@@ -1028,7 +1047,6 @@ bool ShaderLoader::LoadShaderFile(const char *ShaderPath)
 				if(m_inputTextureLocation < 0)
 					m_inputTextureLocation = m_shader.FindUniform("tex0");
 
-				// Added for this app - not in spec
 				if(m_inputTextureLocation1 < 0)
 					m_inputTextureLocation1 = m_shader.FindUniform("tex1");
 
@@ -1125,7 +1143,7 @@ bool ShaderLoader::LoadShaderFile(const char *ShaderPath)
 				if(m_channeltimeLocation < 0)
 					m_channeltimeLocation = m_shader.FindUniform("iChannelTime[3]");
 
-				// TODO - iChannelResolution
+				// iChannelResolution
 				if(m_channelresolutionLocation < 0) // Vec3 width, height, depth * 4
 					m_channelresolutionLocation = m_shader.FindUniform("iChannelResolution[4]");
 				if(m_channelresolutionLocation < 0)
@@ -1138,24 +1156,21 @@ bool ShaderLoader::LoadShaderFile(const char *ShaderPath)
 					m_channelresolutionLocation = m_shader.FindUniform("iChannelResolution[3]");
 
 				// ShaderLoader : inputColour - linked to user input
-				// if(m_channelresolutionLocation >= 0) printf("iChannelResolution found\n");
-				// else printf("iChannelResolution not found\n");
-
 				if(m_inputColourLocation < 0)
 					m_inputColourLocation = m_shader.FindUniform("inputColour");
 
 				m_shader.UnbindShader();
 
 				// Delete the local texture because it might be a different size
-				if(m_glTexture0 > 0) {
-					glDeleteTextures(1, &m_glTexture0);
-					m_glTexture0 = 0;
-				}
-
-				if(m_glTexture1 > 0) {
-					glDeleteTextures(1, &m_glTexture1);
-					m_glTexture1 = 0;
-				}
+				// Delete the local texture because it might be a different size
+				if(m_glTexture0 > 0) glDeleteTextures(1, &m_glTexture0);
+				if(m_glTexture1 > 0) glDeleteTextures(1, &m_glTexture1);
+				if(m_glTexture2 > 0) glDeleteTextures(1, &m_glTexture2);
+				if(m_glTexture3 > 0) glDeleteTextures(1, &m_glTexture3);
+				m_glTexture0 = 0;
+				m_glTexture1 = 0;
+				m_glTexture2 = 0;
+				m_glTexture3 = 0;
 
 				// Set the global path to registry because all went well
 				WritePathToRegistry(m_ShaderPath, "Software\\Leading Edge\\FFGLshaderloader", "Filepath");
@@ -1163,18 +1178,326 @@ bool ShaderLoader::LoadShaderFile(const char *ShaderPath)
 				// Start the clock again to start from zero
 				StartCounter();
 
-
 				return true;
 
 			} // bind shader OK
 		} // compile shader OK
 	} // file open OK
-	else {
-		printf("File open error\n");
-	}
+	// else {
+		// printf("File open error\n");
+	// }
 
-	return bInitialized; // no change top the current shader
+	return bInitialized; // no change to the current shader
 
+}
+
+
+void ShaderLoader::SetDefaults() {
+
+	elapsedTime            = 0.0;
+	startTime              = 0.0;
+	lastTime               = 0.0;
+	PCFreq                 = 0.0;
+	CounterStart           = 0;
+
+	m_mouseX               = 0.5;
+	m_mouseY               = 0.5;
+	m_mouseLeftX           = 0.5;
+	m_mouseLeftY           = 0.5;
+
+	m_UserMouseX           = 0.5;
+	m_UserMouseY           = 0.5;
+	m_UserMouseLeftX       = 0.5;
+	m_UserMouseLeftY       = 0.5;
+
+	m_time                 = 0.0;
+	m_dateYear             = 0.0;
+	m_dateMonth            = 0.0;
+	m_dateDay              = 0.0;
+	m_dateTime             = 0.0;
+
+	m_channelTime[0]       = 0.0;
+	m_channelTime[1]       = 0.0;
+	m_channelTime[2]       = 0.0;
+	m_channelTime[3]       = 0.0;
+
+	// ShaderToy -  Vec3 - 4 channels 
+	m_channelResolution[0][0] = 0.0; // 0 is width
+	m_channelResolution[0][1] = 0.0; // 1 is height
+	m_channelResolution[0][2] = 1.0; // 2 is depth
+
+	m_channelResolution[1][0] = 0.0;
+	m_channelResolution[1][1] = 0.0;
+	m_channelResolution[1][2] = 1.0;
+
+	m_channelResolution[2][0] = 0.0;
+	m_channelResolution[2][1] = 0.0;
+	m_channelResolution[2][2] = 1.0;
+
+	m_channelResolution[3][0] = 0.0;
+	m_channelResolution[3][1] = 0.0;
+	m_channelResolution[4][2] = 1.0;
+
+	m_UserSpeed               = 0.5;
+	m_UserMouseX              = 0.5;
+	m_UserMouseY              = 0.5;
+	m_UserMouseLeftX          = 0.5;
+	m_UserMouseLeftY          = 0.5;
+
+	// OpenGL
+	m_glTexture0              = 0;
+	m_glTexture1              = 0;
+	m_glTexture2              = 0;
+	m_glTexture3              = 0;
+	m_fbo                     = 0;
+
+}
+
+bool ShaderLoader::LoadShader(std::string shaderString) {
+		
+		std::string stoyUniforms;
+		//
+		// Extra uniforms specific to ShaderMaker for buth GLSL Sandbox and ShaderToy
+		// For GLSL Sandbox, the extra "inputColour" uniform has to be typed into the shader
+		//		uniform vec4 inputColour
+		static char *extraUniforms = { "uniform vec4 inputColour;\n" };
+		
+		// Is it a GLSL Sandbox file?
+		// look for "uniform float time;". If it does not exist it is a ShaderToy file
+		// This is an exact string, so the shader has to have it.
+		if(strstr(shaderString.c_str(), "uniform float time;") == 0) {
+			//
+			// ShaderToy file
+			//
+			// Shadertoy does not include uniform variables in the source file so add them here
+			//
+			// uniform vec3			iResolution;			// the rendering resolution (in pixels)
+			// uniform float		iGlobalTime;			// current time (in seconds)
+			// uniform vec4		 	iMouse;					// xy contain the current pixel coords (if LMB is down). zw contain the click pixel.
+			// uniform vec4			iDate;					// (year, month, day, time in seconds)
+			// uniform float		iChannelTime[4];		// channel playback time (in seconds)
+			// uniform vec3			iChannelResolution[4];	// channel resolution (in pixels)
+			// uniform sampler2D	iChannel0;				// sampler for input texture 0.
+			// uniform sampler2D	iChannel1;				// sampler for input texture 1.
+			// uniform sampler2D	iChannel2;				// sampler for input texture 2.
+			// uniform sampler2D	iChannel3;				// sampler for input texture 3.
+			static char *uniforms = { "uniform vec3 iResolution;\n"
+									  "uniform float iGlobalTime;\n"
+									  "uniform vec4 iMouse;\n"
+									  "uniform vec4 iDate;\n"
+									  "uniform float iChannelTime[4];\n"
+									  "uniform vec3 iChannelResolution[4];\n"
+									  "uniform sampler2D iChannel0;\n"
+									  "uniform sampler2D iChannel1;\n"
+									  "uniform sampler2D iChannel2;\n"
+									  "uniform sampler2D iChannel3;\n" };
+			
+			stoyUniforms = uniforms;
+			stoyUniforms += extraUniforms;
+			stoyUniforms += shaderString; // add the rest of the shared content
+			shaderString = stoyUniforms;
+		}
+	
+		// initialize gl shader
+		m_shader.SetExtensions(&m_extensions);
+		if (!m_shader.Compile(vertexShaderCode, shaderString.c_str())) {
+			// SelectSpoutPanel("Shader compile error");
+			return false;
+		}
+		else {
+			// activate our shader
+			bool success = false;
+			if (m_shader.IsReady()) {
+				if (m_shader.BindShader())
+					success = true;
+			}
+
+			if (!success) {
+				// SelectSpoutPanel("Shader bind error");
+				return false;
+			}
+			else {
+				// Set uniform locations to -1 so that they are only used if necessary
+				m_timeLocation				 = -1;
+				m_channeltimeLocation		 = -1;
+				m_mouseLocation				 = -1;
+				m_mouseLocationVec4			 = -1;
+				m_dateLocation				 = -1;
+				m_resolutionLocation		 = -1;
+				m_channelresolutionLocation  = -1;
+				m_inputTextureLocation		 = -1;
+				m_inputTextureLocation1		 = -1;
+				m_inputTextureLocation2		 = -1;
+				m_inputTextureLocation3		 = -1;
+				m_screenLocation			 = -1;
+				m_surfaceSizeLocation		 = -1;
+				// m_surfacePositionLocation	= -1; // TODO
+				// m_vertexPositionLocation    = -1; // TODO
+
+				// Extras
+				// Input colour is linked to the user controls Red, Green, Blue, Alpha
+				m_inputColourLocation        = -1;
+
+
+				// lookup the "location" of each uniform
+
+				//
+				// GLSL Sandbox
+				//
+				// Normalized mouse position. Components of this vector are always between 0.0 and 1.0.
+				//	uniform vec2 mouse;
+				// Screen (Viewport) resolution.
+				//	uniform vec2 resolution;
+				// Used for mouse left drag currently
+				//	uniform vec2 surfaceSize;
+				//  TODO uniform vec2 surfacePosition;
+
+				// Input textures do not appear to be in the GLSL Sandbox spec
+				// but are allowed for here
+
+				// From source of index.html on GitHub
+				if(m_inputTextureLocation < 0)
+					m_inputTextureLocation = m_shader.FindUniform("texture");
+
+				// Preferred names tex0 and tex1 which are commonly used
+				if(m_inputTextureLocation < 0)
+					m_inputTextureLocation = m_shader.FindUniform("tex0");
+
+				if(m_inputTextureLocation1 < 0)
+					m_inputTextureLocation1 = m_shader.FindUniform("tex1");
+
+				// TODO tex2 and tex3 ?
+
+				// Backbuffer is not supported and is mapped to Texture unit 0
+				// From source of index.html on GitHub
+				// https://github.com/mrdoob/glsl-sandbox/blob/master/static/index.html
+				if(m_inputTextureLocation < 0)
+					m_inputTextureLocation = m_shader.FindUniform("backbuffer");
+
+				// From several sources
+				if(m_inputTextureLocation < 0)
+					m_inputTextureLocation = m_shader.FindUniform("bbuff");
+
+				// Time
+				if(m_timeLocation < 0)
+					m_timeLocation = m_shader.FindUniform("time");
+
+				// Mouse move
+				if(m_mouseLocation < 0)
+					m_mouseLocation = m_shader.FindUniform("mouse");
+
+				// Screen size
+				if(m_screenLocation < 0) // Vec2
+					m_screenLocation = m_shader.FindUniform("resolution"); 
+
+				// Mouse left drag
+				if(m_surfaceSizeLocation < 0)
+					m_surfaceSizeLocation = m_shader.FindUniform("surfaceSize");
+				
+				/*
+				// TODO
+				// surfacePosAttrib is the attribute, surfacePosition is the varying var
+				m_surfacePositionLocation = m_shader.FindAttribute("surfacePosAttrib"); 
+				if(m_surfacePositionLocation < 0) printf("surfacePosition attribute not found\n");
+				if(m_surfacePositionLocation >= 0) {
+					// enable the attribute
+					m_extensions.glEnableVertexAttribArrayARB(m_surfacePositionLocation);
+				}
+				m_vertexPositionLocation = m_shader.FindAttribute("position");
+				if(m_vertexPositionLocation < 0) printf("vertexPosition attribute not found\n");
+				if(m_vertexPositionLocation >= 0) {
+					// enable the attribute
+					m_extensions.glEnableVertexAttribArrayARB(m_vertexPositionLocation);
+				}
+				*/
+
+				//
+				// Shadertoy
+				//
+
+				
+				//
+				// Texture inputs iChannelx
+				//
+				if(m_inputTextureLocation < 0)
+					m_inputTextureLocation = m_shader.FindUniform("iChannel0");
+				if(m_inputTextureLocation1 < 0)
+					m_inputTextureLocation1 = m_shader.FindUniform("iChannel1");
+				if(m_inputTextureLocation2 < 0)
+					m_inputTextureLocation2 = m_shader.FindUniform("iChannel2");
+				if(m_inputTextureLocation3 < 0)
+					m_inputTextureLocation3 = m_shader.FindUniform("iChannel3");
+
+				// iResolution
+				if(m_resolutionLocation < 0) // Vec3
+					m_resolutionLocation = m_shader.FindUniform("iResolution");
+
+				// iMouse
+				if(m_mouseLocationVec4 < 0) // Shadertoy is Vec4
+					m_mouseLocationVec4 = m_shader.FindUniform("iMouse");
+
+				// iGlobalTime
+				if(m_timeLocation < 0)
+					m_timeLocation = m_shader.FindUniform("iGlobalTime");
+
+				// iDate
+				if(m_dateLocation < 0)
+					m_dateLocation = m_shader.FindUniform("iDate");
+
+				// iChannelTime
+				if(m_channeltimeLocation < 0)
+					m_channeltimeLocation = m_shader.FindUniform("iChannelTime[4]");
+				if(m_channeltimeLocation < 0)
+					m_channeltimeLocation = m_shader.FindUniform("iChannelTime[0]");
+				if(m_channeltimeLocation < 0)
+					m_channeltimeLocation = m_shader.FindUniform("iChannelTime[1]");
+				if(m_channeltimeLocation < 0)
+					m_channeltimeLocation = m_shader.FindUniform("iChannelTime[2]");
+				if(m_channeltimeLocation < 0)
+					m_channeltimeLocation = m_shader.FindUniform("iChannelTime[3]");
+
+				// iChannelResolution
+				if(m_channelresolutionLocation < 0) // Vec3 width, height, depth * 4
+					m_channelresolutionLocation = m_shader.FindUniform("iChannelResolution[4]");
+				if(m_channelresolutionLocation < 0)
+					m_channelresolutionLocation = m_shader.FindUniform("iChannelResolution[0]");
+				if(m_channelresolutionLocation < 0)
+					m_channelresolutionLocation = m_shader.FindUniform("iChannelResolution[1]");
+				if(m_channelresolutionLocation < 0)
+					m_channelresolutionLocation = m_shader.FindUniform("iChannelResolution[2]");
+				if(m_channelresolutionLocation < 0)
+					m_channelresolutionLocation = m_shader.FindUniform("iChannelResolution[3]");
+
+				// inputColour - linked to user input
+				if(m_inputColourLocation < 0)
+					m_inputColourLocation = m_shader.FindUniform("inputColour");
+
+				m_shader.UnbindShader();
+
+				// Delete the local texture because it might be a different size
+				if(m_glTexture0 > 0) glDeleteTextures(1, &m_glTexture0);
+				if(m_glTexture1 > 0) glDeleteTextures(1, &m_glTexture1);
+				if(m_glTexture2 > 0) glDeleteTextures(1, &m_glTexture2);
+				if(m_glTexture3 > 0) glDeleteTextures(1, &m_glTexture3);
+				m_glTexture0 = 0;
+				m_glTexture1 = 0;
+				m_glTexture2 = 0;
+				m_glTexture3 = 0;
+
+				// Start the clock again to start from zero
+				StartCounter();
+
+				// printf("shader Loaded OK\n");
+
+				return true;
+
+			} // bind shader OK
+		} // compile shader OK
+		// =============================================
+
+		// printf("shader Load failed\n");
+
+		return false;
 }
 
 bool ShaderLoader::WritePathToRegistry(const char *filepath, const char *subkey, const char *valuename)
@@ -1231,6 +1554,7 @@ bool ShaderLoader::ReadPathFromRegistry(const char *filepath, const char *subkey
 }
 
 
+
 void ShaderLoader::StartCounter()
 {
     LARGE_INTEGER li;
@@ -1277,6 +1601,7 @@ bool ShaderLoader::AddModulePath(const char *username, char *userpath)
 
 	// Split out the path itself and look for the shader path
 	// e.g. - G:\Program Files\Common Files\Freeframe\Shaders
+	// TODO - update to Path function
 	_splitpath_s(path, drive, 16, dir, MAX_PATH, NULL, NULL, NULL, 0);
 	sprintf_s(modulepath, MAX_PATH, "%s%s", drive, dir);
 
@@ -1339,6 +1664,7 @@ bool ShaderLoader::SelectSpoutPanel(const char *message)
 			// Otherwise find the path of the host program where SpoutPanel should have been copied
 			module = GetModuleHandle(NULL);
 			GetModuleFileNameA(module, path, MAX_PATH);
+			// TODO - update to path function
 			_splitpath_s(path, drive, MAX_PATH, dir, MAX_PATH, fname, MAX_PATH, NULL, 0);
 			_makepath_s(path, MAX_PATH, drive, dir, "SpoutPanel", ".exe");
 		}
@@ -1397,6 +1723,7 @@ bool ShaderLoader::OpenEditor(const char *filepath)
 {
 	HANDLE hMutex;
 	HWND hWnd = NULL;
+	char directory[MAX_PATH];
 
 	// Is SpoutPanel open ?
 	hMutex = OpenMutexA(MUTEX_ALL_ACCESS, 0, "SpoutPanel");
@@ -1406,30 +1733,34 @@ bool ShaderLoader::OpenEditor(const char *filepath)
 		return false;
 	}
 
+	strcpy_s(directory, MAX_PATH, filepath);
+	PathRemoveFileSpecA(directory); // Get the directory of the file path
+	// printf("Directory = %s\n", directory);
+
 	//
 	// Use  ShellExecuteEx so we can test its return value later
 	//
 	memset(&ShExecInfo, 0, sizeof(ShExecInfo));
 	ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
-	ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
+	ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS; // to return hProcess
 	ShExecInfo.hwnd = NULL;
-	ShExecInfo.lpVerb = NULL;
+	ShExecInfo.lpVerb = NULL; // can be edit
 	// Can lock in NotePad for text files but better to use file associations
 	// to allow for other user preferred editors
 	// ShExecInfo.lpFile = (LPCSTR)"notepad.exe";
 	// ShExecInfo.lpParameters = filepath;
 	ShExecInfo.lpFile = (LPCSTR)filepath;
 	ShExecInfo.lpParameters = "";
-	ShExecInfo.lpDirectory = NULL;
+	ShExecInfo.lpDirectory = directory; // working directory NULL;
 	ShExecInfo.nShow = SW_SHOW;
 	ShExecInfo.hInstApp = NULL;	
 	ShellExecuteExA(&ShExecInfo);
-	Sleep(125); // alow time for Notepad to open
+	Sleep(250); // alow time to open
+
 
 	return true;
 
 } // end OpenEditor
-
 
 //
 // ========= USER SELECTION PANEL TEST =====
@@ -1468,9 +1799,16 @@ bool ShaderLoader::CheckSpoutPanel()
 		return bRet;
 } // ========= END USER SELECTION PANEL =====
 
-// NPOTS textures support only the GL_CLAMP, GL_CLAMP_TO_EDGE, and GL_CLAMP_TO_BORDER wrap modes;
+// NPOTS textures support only the GL_CLAMP, GL_CLAMP_TO_EDGE, and GL_CLAMP_TO_BORDER wrap modes ??
+// Seems OK with this.
+
 void ShaderLoader::CreateRectangleTexture(FFGLTextureStruct Texture, FFGLTexCoords maxCoords, GLuint &glTexture, GLenum texunit, GLuint &fbo, GLuint hostFbo)
 {
+	GLuint w, h;
+
+	// w = Texture.Width;
+	// h = Texture.Width;
+
 	// First create an fbo and a texture the same size if they don't exist
 	if(fbo == 0) {
 		m_extensions.glGenFramebuffersEXT(1, &fbo); 
@@ -1481,15 +1819,12 @@ void ShaderLoader::CreateRectangleTexture(FFGLTextureStruct Texture, FFGLTexCoor
 		m_extensions.glActiveTexture(texunit);
 		glBindTexture(GL_TEXTURE_2D, glTexture);
 		glTexImage2D(GL_TEXTURE_2D, 0,  GL_RGBA, Texture.Width, Texture.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-		/*
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_MIRRORED_REPEAT);
-		*/
+		// glTexImage2D(GL_TEXTURE_2D, 0,  GL_RGBA, 1, Texture.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
-
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glBindTexture(GL_TEXTURE_2D, 0);
@@ -1505,7 +1840,7 @@ void ShaderLoader::CreateRectangleTexture(FFGLTextureStruct Texture, FFGLTexCoor
 	glBegin(GL_QUADS);
 	//
 	// Must refer to maxCoords here because the texture
-	// is smaller than the hardware size containing it
+	// could be smaller than the hardware size containing it
 	//
 	//lower left
 	glTexCoord2f(0.0, 0.0);

@@ -22,6 +22,11 @@
 //					Version 1.003
 //		10.02.15	Cleanup - remove leftover print statements
 //					Version 1.004
+//		09.03.15	Provided for revised SharedToy spec with mainImage instead of main
+//                  See ShaderToy example : "https://www.shadertoy.com/view/ldl3W8#"
+//					Included shader file validation string "fragColor" as well as "gl_FragColor" in line with new spec
+//					Version 1.004
+//
 //		------------------------------------------------------------
 //
 //		Copyright (C) 2015. Lynn Jarvis, Leading Edge. Pty. Ltd.
@@ -930,9 +935,10 @@ bool ShaderLoader::LoadShaderFile(const char *ShaderPath)
 	    // Get the shader fragment file source as a single string
 		shaderString.assign( ( std::istreambuf_iterator< char >( sourceFile ) ), std::istreambuf_iterator< char >() );
 		sourceFile.close();
+
 		// Is it a shader file ?
-		// Look for the key word "gl_FragColor".
-		if(strstr(shaderString.c_str(), "gl_FragColor") == 0) {
+		// Look for the key string "fragColor" as well as "gl_FragColor" to allow for revised ShaderToy spec with "mainImage"
+		if(!(strstr(shaderString.c_str(), "fragColor") == 0 || strstr(shaderString.c_str(), "gl_FragColor") == 0)) {
 			SelectSpoutPanel("Not a shader file");
 			return bInitialized; // no change to the current shader
 		}
@@ -979,7 +985,23 @@ bool ShaderLoader::LoadShaderFile(const char *ShaderPath)
 			stoyUniforms = uniforms;
 			stoyUniforms += extraUniforms;
 			stoyUniforms += shaderString; // add the rest of the shared content
-			shaderString = stoyUniforms;
+
+			// It might be a revised ShaderToy file with "mainImage" instead of "main"
+			if(strstr(shaderString.c_str(), "void mainImage") != 0) {
+				//
+				// If it is a revised spec ShaderToy file, add a fix at the end for GLSL compatibility
+				//
+				// Credit Eric Newman 
+				// http://magicmusicvisuals.com/forums/viewtopic.php?f=2&t=196
+				//
+				static char *stoyMainFunction = { "void main(void) {\n"
+												  "    mainImage(gl_FragColor, gl_FragCoord.xy);\n"
+												  "}\n" };
+				stoyUniforms += stoyMainFunction;
+			}
+
+			shaderString = stoyUniforms; // the final string
+
 		}
 	
 		// initialize gl shader
@@ -1804,11 +1826,6 @@ bool ShaderLoader::CheckSpoutPanel()
 
 void ShaderLoader::CreateRectangleTexture(FFGLTextureStruct Texture, FFGLTexCoords maxCoords, GLuint &glTexture, GLenum texunit, GLuint &fbo, GLuint hostFbo)
 {
-	GLuint w, h;
-
-	// w = Texture.Width;
-	// h = Texture.Width;
-
 	// First create an fbo and a texture the same size if they don't exist
 	if(fbo == 0) {
 		m_extensions.glGenFramebuffersEXT(1, &fbo); 
@@ -1819,7 +1836,6 @@ void ShaderLoader::CreateRectangleTexture(FFGLTextureStruct Texture, FFGLTexCoor
 		m_extensions.glActiveTexture(texunit);
 		glBindTexture(GL_TEXTURE_2D, glTexture);
 		glTexImage2D(GL_TEXTURE_2D, 0,  GL_RGBA, Texture.Width, Texture.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-		// glTexImage2D(GL_TEXTURE_2D, 0,  GL_RGBA, 1, Texture.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
